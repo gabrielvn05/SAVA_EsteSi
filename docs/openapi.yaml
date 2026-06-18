@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: SAVA API
+  description: API del Sistema de Asistencia y Validaciones Académicas (ULEAM)
+  version: 1.0.0
+  contact:
+    name: DIIT - ULEAM
+servers:
+  - url: /api
+    description: Servidor de aplicación
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sb-access-token
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          nullable: true
+        error:
+          nullable: true
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [UNAUTHORIZED, FORBIDDEN, VALIDATION, NOT_FOUND, CONFLICT, INTERNAL]
+            message:
+              type: string
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            requestId:
+              type: string
+            pagination:
+              type: object
+              properties:
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+                totalItems:
+                  type: integer
+                totalPages:
+                  type: integer
+    PerfilCertificado:
+      type: object
+      properties:
+        nombres:
+          type: string
+        apellidos:
+          type: string
+        nombre_completo:
+          type: string
+        email:
+          type: string
+        tipo_personal:
+          type: string
+paths:
+  /perfil:
+    get:
+      summary: Obtener perfil del solicitante para certificados
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Perfil obtenido
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/PerfilCertificado"
+        "401":
+          description: No autenticado
+  /certificado/generar:
+    post:
+      summary: Generar certificado PDF de justificación
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tipo, fecha_inicio, fecha_fin, motivo]
+              properties:
+                tipo:
+                  type: string
+                  enum: [enfermedad, viaje, calamidad_domestica, falta_marcado]
+                fecha_inicio:
+                  type: string
+                  format: date
+                fecha_fin:
+                  type: string
+                  format: date
+                motivo:
+                  type: string
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                payload:
+                  type: string
+                anexo:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: PDF generado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Validación fallida
+        "401":
+          description: No autenticado
+  /certificado/generar-docx:
+    post:
+      summary: Generar certificado en formato Word
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: DOCX generado
+        "401":
+          description: No autenticado
+  /certificado/firmar:
+    post:
+      summary: Firmar PDF con certificado .p12
+      security:
+        - cookieAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [pdf, p12]
+              properties:
+                pdf:
+                  type: string
+                  format: binary
+                p12:
+                  type: string
+                  format: binary
+                password:
+                  type: string
+      responses:
+        "200":
+          description: PDF firmado
+        "400":
+          description: Error de firma
+        "401":
+          description: No autenticado

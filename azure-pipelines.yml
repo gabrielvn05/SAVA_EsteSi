@@ -1,0 +1,64 @@
+# Pipeline CI/CD — lineamientos DIIT (Azure DevOps)
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  NODE_VERSION: "22.x"
+
+stages:
+  - stage: Build_Test
+    displayName: Construcción y pruebas
+    jobs:
+      - job: QualityGate
+        displayName: Lint, pruebas y build
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: $(NODE_VERSION)
+            displayName: Instalar Node.js
+
+          - script: npm ci
+            displayName: Instalar dependencias
+
+          - script: npm run lint
+            displayName: Lint
+
+          - script: npm run test
+            displayName: Pruebas unitarias
+
+          - script: npm run build
+            displayName: Build producción
+            env:
+              NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+              NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+              SUPABASE_SERVICE_ROLE_KEY: placeholder
+              NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  - stage: Docker
+    displayName: Imagen Docker
+    dependsOn: Build_Test
+    condition: succeeded()
+    jobs:
+      - job: BuildImage
+        displayName: Construir imagen
+        steps:
+          - task: Docker@2
+            displayName: Build Docker
+            inputs:
+              command: build
+              Dockerfile: Dockerfile
+              tags: |
+                sava:$(Build.BuildId)
+                sava:latest
