@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DateInput } from "@/components/ui/DateInput";
+import { LoadingLink } from "@/components/ui/LoadingLink";
 import { PaginationControls } from "@/components/PaginationControls";
 import { StatusBadge } from "@/components/StatusBadge";
 import { labelTipoSolicitud } from "@/lib/solicitud-tipo-labels";
@@ -166,12 +166,12 @@ export function MisSolicitudesFilterTable({
                     </td>
                     <td>
                       <div className="cell-actions">
-                        <Link href={`/solicitudes/${s.id}`} className="btn btn--secondary btn--sm">
+                        <LoadingLink href={`/solicitudes/${s.id}`} className="btn btn--secondary btn--sm" loadingLabel="Abriendo detalle…">
                           Ver detalles
-                        </Link>
-                        <Link href={`/solicitudes/${s.id}/editar`} className="btn btn--secondary btn--sm">
+                        </LoadingLink>
+                        <LoadingLink href={`/solicitudes/${s.id}/editar`} className="btn btn--secondary btn--sm" loadingLabel="Abriendo editor…">
                           Editar
-                        </Link>
+                        </LoadingLink>
                       </div>
                     </td>
                   </tr>

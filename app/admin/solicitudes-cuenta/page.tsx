@@ -2,7 +2,6 @@ import { PageHeader } from "@/components/PageHeader";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile, requireAuth } from "@/lib/auth";
 import { aprobarSolicitudCuenta, rechazarSolicitudCuenta } from "@/app/actions";
-import { labelJornadaCuenta } from "@/lib/account-request";
 import { labelCarrera } from "@/lib/carreras";
 import { labelRolSistema, puedeAprobarSolicitudCuenta } from "@/lib/rol-labels";
 import { unstable_noStore as noStore } from "next/cache";
@@ -31,7 +30,7 @@ export default async function SolicitudesCuentaPage() {
   const { data, error } = await admin
     .from("account_requests")
     .select(
-      "id, email, nombres, apellidos, cedula, celular, carrera, jornada, rol_solicitado, status, created_at"
+      "id, email, nombres, apellidos, cedula, celular, carrera, rol_solicitado, status, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -79,7 +78,6 @@ export default async function SolicitudesCuentaPage() {
                 <th>Correo</th>
                 <th>Celular</th>
                 <th>Carrera</th>
-                <th>Jornada</th>
                 <th>Rol</th>
                 <th>Estado</th>
                 <th>Acciones</th>
@@ -88,7 +86,7 @@ export default async function SolicitudesCuentaPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: "center", color: "var(--color-text-muted)" }}>
+                  <td colSpan={8} style={{ textAlign: "center", color: "var(--color-text-muted)" }}>
                     No hay solicitudes.
                   </td>
                 </tr>
@@ -104,7 +102,6 @@ export default async function SolicitudesCuentaPage() {
                     <td>{r.email}</td>
                     <td>{r.celular || "—"}</td>
                     <td>{labelCarrera(r.carrera)}</td>
-                    <td>{labelJornadaCuenta(r.jornada)}</td>
                     <td>{labelRolSistema(r.rol_solicitado)}</td>
                     <td>{r.status}</td>
                     <td>

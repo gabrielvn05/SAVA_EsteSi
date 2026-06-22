@@ -2,8 +2,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile, hasCapability, requireAuth } from "@/lib/auth";
 import { SolicitudDetallePanel } from "@/components/solicitudes/SolicitudDetallePanel";
 import { fetchSolicitudParaUsuario } from "@/lib/solicitud-access";
+import { anexosDesdeDetalle } from "@/lib/solicitud-anexos";
 import { codigoTramiteDesdeSolicitud } from "@/lib/solicitud-timeline";
-import { generarPreviewOficioHtml } from "@/lib/certificado/preview-oficio-solicitud";
 
 type Params = { id: string };
 
@@ -29,8 +29,10 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
     );
   }
 
-  const puedeRevisar = await hasCapability(user.id, "revisar_solicitudes");
-  const puedeAprobar = await hasCapability(user.id, "aprobar_solicitudes");
+  const [puedeRevisar, puedeAprobar] = await Promise.all([
+    hasCapability(user.id, "revisar_solicitudes"),
+    hasCapability(user.id, "aprobar_solicitudes")
+  ]);
 
   let profiles = data.profiles as { nombres: string; apellidos: string } | { nombres: string; apellidos: string }[] | null;
   if (Array.isArray(profiles)) profiles = profiles[0] ?? null;
@@ -54,9 +56,10 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
     : null;
 
   const detalleObj = (data.detalle as Record<string, unknown>) ?? null;
-  const anexoPath = typeof detalleObj?.anexo_path === "string" ? detalleObj.anexo_path : null;
-  const anexoNombre = typeof detalleObj?.anexo_nombre === "string" ? detalleObj.anexo_nombre : null;
-  const anexoUrl = anexoPath ? `${supabaseBase}/storage/v1/object/public/justificativos/${anexoPath}` : null;
+  const anexosResueltos = anexosDesdeDetalle(detalleObj, supabaseBase ?? "");
+  const anexoPath = anexosResueltos[0]?.path ?? null;
+  const anexoNombre = anexosResueltos[0]?.nombre ?? null;
+  const anexoUrl = anexosResueltos[0]?.url ?? null;
 
   const codigoTramite = codigoTramiteDesdeSolicitud({
     tipo: data.tipo,
@@ -66,18 +69,7 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
     apellidos: profiles?.apellidos ?? ""
   });
 
-  const oficioPreviewHtml = hasJustificativo
-    ? await generarPreviewOficioHtml({
-        tipo: data.tipo,
-        fecha_inicio: data.fecha_inicio,
-        fecha_fin: data.fecha_fin,
-        motivo: data.motivo,
-        detalle: detalleObj,
-        creado_por: data.creado_por,
-        nombres: profiles?.nombres ?? "",
-        apellidos: profiles?.apellidos ?? ""
-      })
-    : null;
+  const oficioPreviewHtml = null;
 
   return (
     <SolicitudDetallePanel
@@ -96,6 +88,7 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
         justificativo_url: justificativoUrl,
         anexo_nombre: anexoNombre,
         anexo_url: anexoUrl,
+        anexos: anexosResueltos.map((a) => ({ nombre: a.nombre, url: a.url })),
         created_at: data.created_at,
         updated_at: data.updated_at,
         fecha_firma: data.fecha_firma,
@@ -104,7 +97,8 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
         firmado_por: data.firmado_por,
         solicitante_nombre: solicitanteNombre,
         codigo_tramite: codigoTramite,
-        oficio_preview_html: oficioPreviewHtml
+        oficio_preview_html: oficioPreviewHtml,
+        solicitud_id: data.id
       }}
       userId={user.id}
       puedeRevisar={puedeRevisar}

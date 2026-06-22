@@ -78,3 +78,28 @@ export function validarAnexoOpcional(file: { size: number; type: string; name: s
   }
   return null;
 }
+
+function validarListaAnexos(files: ReadonlyArray<{ size: number; type: string; name: string }>): string | null {
+  for (const file of files) {
+    const err = validarAnexoOpcional(file);
+    if (err) return err;
+  }
+  return null;
+}
+
+export function validarAnexosObligatorio(
+  tipo: string,
+  files: ReadonlyArray<{ size: number; type: string; name: string }>
+): string | null {
+  if (tipo !== "enfermedad") return null;
+  if (files.length === 0) {
+    return "Para cita médica debes adjuntar el certificado o documento de respaldo (PDF, PNG o JPG).";
+  }
+  return validarListaAnexos(files);
+}
+
+export function validarAnexosOpcional(
+  files: ReadonlyArray<{ size: number; type: string; name: string }>
+): string | null {
+  return validarListaAnexos(files);
+}

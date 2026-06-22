@@ -9,7 +9,10 @@ const SECURITY_HEADERS: Record<string, string> = {
 };
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request: { headers: request.headers } });
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(key, value);
   }
@@ -33,9 +36,16 @@ export async function middleware(request: NextRequest) {
   );
 
   // Refresca la sesión y persiste cookies en la respuesta.
-  await supabase.auth.getUser();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  response.headers.set("x-pathname", request.nextUrl.pathname);
+  const pathname = request.nextUrl.pathname;
+  if (user && (pathname === "/login" || pathname.startsWith("/solicitar-cuenta"))) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  response.headers.set("x-pathname", pathname);
   return response;
 }
 

@@ -4,7 +4,7 @@ import {
   justificativoEsImagen,
   justificativoEsPdf
 } from "@/lib/solicitud-preview";
-
+import { OficioPreviewLazy } from "@/components/solicitudes/OficioPreviewLazy";
 type Props = Readonly<{
   codigoTramite: string;
   oficioPreviewHtml: string | null;
@@ -18,6 +18,8 @@ type Props = Readonly<{
   justificativoUrl: string | null;
   anexoNombre?: string | null;
   anexoUrl?: string | null;
+  anexos?: ReadonlyArray<{ nombre: string; url: string }>;
+  solicitudId?: string;
 }>;
 
 function BloqueAdjunto({
@@ -63,10 +65,18 @@ export function SolicitudVistaPrevia({
   justificativoNombre,
   justificativoUrl,
   anexoNombre,
-  anexoUrl
+  anexoUrl,
+  anexos = [],
+  solicitudId
 }: Props) {
   const fields = buildSolicitudPreviewFields(tipo, detalle, motivo, fechaInicio, fechaFin);
   const nombreDescarga = `${codigoTramite}.docx`;
+  const adjuntos =
+    anexos.length > 0
+      ? anexos
+      : anexoUrl && anexoNombre
+        ? [{ nombre: anexoNombre, url: anexoUrl }]
+        : [];
 
   return (
     <article className="card stack solicitud-preview">
@@ -94,28 +104,25 @@ export function SolicitudVistaPrevia({
         </dl>
       </div>
 
-      {justificativoUrl && oficioPreviewHtml ? (
-        <div className="solicitud-preview__adjunto stack">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Oficio institucional</h3>
-            <a href={justificativoUrl} download={nombreDescarga} className="btn btn--secondary btn--sm">
-              Descargar {nombreDescarga}
-            </a>
-          </div>
-          <p className="field-hint" style={{ margin: 0 }}>
-            {justificativoNombre ?? nombreDescarga}
-          </p>
-          <iframe
-            title="Vista previa del oficio institucional"
-            srcDoc={oficioPreviewHtml}
-            className="solicitud-preview__iframe"
-          />
-        </div>
+      {justificativoUrl ? (
+        <OficioPreviewLazy
+          solicitudId={solicitudId}
+          justificativoUrl={justificativoUrl}
+          justificativoNombre={justificativoNombre}
+          nombreDescarga={nombreDescarga}
+          initialHtml={oficioPreviewHtml}
+        />
       ) : null}
+      {adjuntos.map((anexo, index) => (
+        <BloqueAdjunto
+          key={`${anexo.url}-${anexo.nombre}`}
+          titulo={adjuntos.length > 1 ? `Documento de respaldo ${index + 1}` : "Documento de respaldo"}
+          nombre={anexo.nombre}
+          url={anexo.url}
+        />
+      ))}
 
-      <BloqueAdjunto titulo="Documento de respaldo" nombre={anexoNombre ?? null} url={anexoUrl ?? null} />
-
-      {!justificativoUrl && !anexoUrl ? (
+      {!justificativoUrl && adjuntos.length === 0 ? (
         <p className="field-hint" style={{ margin: 0 }}>
           No hay documentos adjuntos.
         </p>

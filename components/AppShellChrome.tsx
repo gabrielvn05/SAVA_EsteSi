@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
 import type { SidebarNavItem } from "@/components/sidebar-nav-types";
 
 type AppShellChromeProps = Readonly<{
@@ -32,16 +33,23 @@ function SidebarNav({
   pathname,
   expandedGroup,
   setExpandedGroup,
-  onNavigate
+  onNavigate,
+  onNavStart
 }: Readonly<{
   sidebarItems: SidebarNavItem[];
   pathname: string;
   expandedGroup: string | null;
   setExpandedGroup: (value: string | null | ((current: string | null) => string | null)) => void;
   onNavigate?: () => void;
+  onNavStart?: () => void;
 }>) {
   const isActive = (href: string) =>
     pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+
+  function handleNavClick() {
+    onNavStart?.();
+    onNavigate?.();
+  }
 
   return (
     <nav className="sidebar-nav" aria-label="Menú principal">
@@ -52,7 +60,7 @@ function SidebarNav({
               key={`link-${entry.href}`}
               href={entry.href}
               className={`sidebar-nav__link${isActive(entry.href) ? " is-active" : ""}`}
-              onClick={onNavigate}
+              onClick={handleNavClick}
             >
               {entry.label}
             </Link>
@@ -78,7 +86,7 @@ function SidebarNav({
                     key={sub.href}
                     href={sub.href}
                     className={`sidebar-nav__sublink${isActive(sub.href) ? " is-active" : ""}`}
-                    onClick={onNavigate}
+                    onClick={handleNavClick}
                   >
                     {sub.label}
                   </Link>
@@ -96,6 +104,7 @@ export function AppShellChrome(props: AppShellChromeProps) {
   const { sidebarItems, userDisplayName, rolLabel, mostrarPill, logoSrc, children } = props;
   const userSubtitle = props.userSubtitle ?? "";
   const pathname = usePathname();
+  const [isPending, startTransition] = useTransition();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
@@ -114,7 +123,15 @@ export function AppShellChrome(props: AppShellChromeProps) {
     }
   }, [pathname, sidebarItems]);
 
+  useEffect(() => {
+    startTransition(() => undefined);
+  }, [pathname, startTransition]);
+
   const closeMobile = useCallback(() => setMobileOpen(false), []);
+  const startNav = useCallback(() => {
+    startTransition(() => undefined);
+    closeMobile();
+  }, [closeMobile, startTransition]);
 
   useEffect(() => {
     if (!mobileOpen && !logoutModalOpen) return;
@@ -154,6 +171,7 @@ export function AppShellChrome(props: AppShellChromeProps) {
         expandedGroup={expandedGroup}
         setExpandedGroup={setExpandedGroup}
         onNavigate={closeMobile}
+        onNavStart={startNav}
       />
 
       <div className="sidebar-panel__footer">
@@ -168,6 +186,8 @@ export function AppShellChrome(props: AppShellChromeProps) {
 
   return (
     <div className={`app-shell-layout${hasNav ? " app-shell-layout--with-sidebar" : ""}`}>
+      {isPending ? <div className="route-progress" aria-hidden /> : null}
+      {isPending ? <LoadingOverlay label="Cargando…" /> : null}
       <header className="topbar topbar--light app-shell__header">
         <div className="topbar__start">
           {hasNav ? (
@@ -213,7 +233,7 @@ export function AppShellChrome(props: AppShellChromeProps) {
           </>
         ) : null}
 
-        <div className="app-shell__content">{children}</div>
+        <div className="app-shell__content page-enter">{children}</div>
       </div>
 
       {logoutModalOpen ? (

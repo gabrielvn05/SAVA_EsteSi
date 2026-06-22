@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { firmarSolicitud, revisarSolicitud } from "@/app/actions";
@@ -8,6 +7,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SolicitudTimeline } from "@/components/solicitudes/SolicitudTimeline";
 import { SolicitudVistaPrevia } from "@/components/solicitudes/SolicitudVistaPrevia";
 import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
+import { ActionButton } from "@/components/ui/ActionButton";
+import { LoadingLink } from "@/components/ui/LoadingLink";
+import { observacionRechazoVisible } from "@/lib/solicitud-observaciones";
 import { buildSolicitudTimeline } from "@/lib/solicitud-timeline";
 
 export type SolicitudDetalleData = Readonly<{
@@ -25,6 +27,7 @@ export type SolicitudDetalleData = Readonly<{
   justificativo_url: string | null;
   anexo_nombre: string | null;
   anexo_url: string | null;
+  anexos: ReadonlyArray<{ nombre: string; url: string }>;
   created_at: string;
   updated_at: string;
   fecha_firma: string | null;
@@ -34,6 +37,7 @@ export type SolicitudDetalleData = Readonly<{
   solicitante_nombre: string;
   codigo_tramite: string;
   oficio_preview_html: string | null;
+  solicitud_id?: string;
 }>;
 
 type Props = Readonly<{
@@ -66,6 +70,7 @@ export function SolicitudDetallePanel({
 
   const timeline = buildSolicitudTimeline(solicitud);
   const tramiteNum = solicitud.codigo_tramite;
+  const observacionRechazo = observacionRechazoVisible(solicitud);
 
   const puedeActuarSecretaria =
     puedeRevisar && solicitud.estado === "en_revision_secretaria" && solicitud.creado_por !== userId;
@@ -137,13 +142,14 @@ export function SolicitudDetallePanel({
       {procesando ? <LoadingOverlay label="Procesando solicitud…" /> : null}
 
       <div className="tramite-header-bar">
-        <Link
+        <LoadingLink
           href={esStaff ? "/solicitudes/proceso-aprobacion" : "/solicitudes"}
           className="tramite-header-bar__back"
+          loadingLabel="Volviendo…"
           aria-label="Volver"
         >
           ←
-        </Link>
+        </LoadingLink>
         <h1 className="tramite-header-bar__title">Detalle del trámite</h1>
       </div>
 
@@ -191,6 +197,7 @@ export function SolicitudDetallePanel({
       <SolicitudVistaPrevia
         codigoTramite={solicitud.codigo_tramite}
         oficioPreviewHtml={solicitud.oficio_preview_html}
+        solicitudId={solicitud.solicitud_id}
         tipo={solicitud.tipo}
         motivo={solicitud.motivo}
         fechaInicio={solicitud.fecha_inicio}
@@ -201,24 +208,16 @@ export function SolicitudDetallePanel({
         justificativoUrl={solicitud.justificativo_url}
         anexoNombre={solicitud.anexo_nombre}
         anexoUrl={solicitud.anexo_url}
+        anexos={solicitud.anexos}
+        solicitudId={solicitud.solicitud_id}
       />
 
-      {solicitud.observaciones_secretaria || solicitud.observaciones_decano ? (
+      {observacionRechazo ? (
         <article className="card stack">
           <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Observaciones del proceso</h2>
-          <div className="detail-grid">
-            {solicitud.observaciones_secretaria ? (
-              <div className="motivo-box">
-                <label>Observación Secretaría</label>
-                <div>{solicitud.observaciones_secretaria}</div>
-              </div>
-            ) : null}
-            {solicitud.observaciones_decano ? (
-              <div className="motivo-box">
-                <label>Observación Decano</label>
-                <div>{solicitud.observaciones_decano}</div>
-              </div>
-            ) : null}
+          <div className="motivo-box">
+            <label>{observacionRechazo.label}</label>
+            <div>{observacionRechazo.texto}</div>
           </div>
         </article>
       ) : null}
@@ -230,17 +229,18 @@ export function SolicitudDetallePanel({
             Aprueba o rechaza esta solicitud. Si rechaza, deberá indicar el motivo.
           </p>
           <div className="row" style={{ gap: "0.65rem", flexWrap: "wrap" }}>
-            <button
+            <ActionButton
               type="button"
-              className="btn btn--success"
-              disabled={procesando}
+              className="btn--success"
+              loading={procesando}
+              loadingLabel="Aprobando…"
               onClick={() => ejecutarAprobacion(puedeActuarSecretaria ? "secretaria" : "decano")}
             >
               Aprobar
-            </button>
-            <button
+            </ActionButton>
+            <ActionButton
               type="button"
-              className="btn btn--danger"
+              className="btn--danger"
               disabled={procesando}
               onClick={() => {
                 setError(null);
@@ -249,16 +249,16 @@ export function SolicitudDetallePanel({
               }}
             >
               Rechazar
-            </button>
+            </ActionButton>
           </div>
         </article>
       ) : null}
 
       {esCreador && solicitud.estado === "en_revision_secretaria" && !resultado ? (
         <div className="row">
-          <Link href={`/solicitudes/${solicitud.id}/editar`} className="btn btn--primary">
+          <LoadingLink href={`/solicitudes/${solicitud.id}/editar`} className="btn btn--primary" loadingLabel="Abriendo editor…">
             Editar solicitud
-          </Link>
+          </LoadingLink>
         </div>
       ) : null}
 
@@ -289,9 +289,9 @@ export function SolicitudDetallePanel({
               <button type="button" className="btn btn--ghost" onClick={() => setRechazoTarget(null)}>
                 Cancelar
               </button>
-              <button type="button" className="btn btn--danger" disabled={procesando} onClick={ejecutarRechazo}>
+              <ActionButton type="button" className="btn--danger" loading={procesando} loadingLabel="Rechazando…" onClick={ejecutarRechazo}>
                 Confirmar rechazo
-              </button>
+              </ActionButton>
             </div>
           </div>
         </div>

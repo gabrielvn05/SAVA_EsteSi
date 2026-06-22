@@ -12,7 +12,7 @@ import {
   labelTipoPersonal,
   parseTipoPersonal
 } from "@/lib/certificado/tipo-personal";
-import { validarAnexoObligatorio, validarAnexoOpcional } from "@/lib/certificado/merge-pdf-anexos";
+import { validarAnexosObligatorio, validarAnexosOpcional } from "@/lib/certificado/merge-pdf-anexos";
 import { labelCarrera } from "@/lib/carreras";
 import { labelJornadaCuenta, isJornadaCuentaValida } from "@/lib/account-request";
 import {
@@ -21,6 +21,11 @@ import {
   type PerfilInstitucional
 } from "@/lib/perfil-institucional";
 import { buildCodigoTramite, nombreArchivoOficio } from "@/lib/codigo-tramite";
+import { soloDigitos } from "@/lib/form-validators";
+import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
+import { ActionButton } from "@/components/ui/ActionButton";
+import { MultiFileUpload } from "@/components/ui/MultiFileUpload";
+import { HORA_MAXIMA_JORNADA, HORA_MINIMA_JORNADA, TimeInput } from "@/components/ui/TimeInput";
 
 type Tipo = "enfermedad" | "viaje" | "calamidad_domestica" | "falta_marcado";
 
@@ -30,6 +35,22 @@ type Meta = Readonly<{
   motivo: string;
   detalle: Record<string, unknown>;
 }>;
+
+const TIPOS_INSTITUCION_MEDICA = [
+  "IESS",
+  "Ministerio de Salud Pública",
+  "Hospital privado",
+  "Centro de salud",
+  "Otro"
+] as const;
+
+function resolverInstitucionMedica(
+  tipo: string,
+  nombreManual: string
+): string {
+  if (tipo === "IESS") return "IESS";
+  return nombreManual.trim();
+}
 
 const TIPOS: ReadonlyArray<Readonly<{ id: Tipo; title: string; description: string }>> = [
   {
@@ -94,10 +115,11 @@ export function JustificacionWizard() {
   const [step, setStep] = useState<0 | 1>(0);
   const [tipo, setTipo] = useState<Tipo | null>(null);
   const [f, setF] = useState<Record<string, string>>({});
-  const [anexo, setAnexo] = useState<File | null>(null);
+  const [anexos, setAnexos] = useState<File[]>([]);
 
   const [busy, setBusy] = useState(false);
   const [busyPreview, setBusyPreview] = useState(false);
+  const [procesandoNav, setProcesandoNav] = useState(false);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [haVistoPrevia, setHaVistoPrevia] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +175,7 @@ export function JustificacionWizard() {
   useEffect(() => {
     setPreviewHtml(null);
     setHaVistoPrevia(false);
-  }, [f, tipo, anexo]);
+  }, [f, tipo]);
 
   function patchField(key: string, value: string) {
     setF((prev) => ({ ...prev, [key]: value }));
@@ -185,7 +207,12 @@ export function JustificacionWizard() {
       const err = validateFechaInicioMaxTresMeses(fecha_inasistencia);
       if (err) throw new Error(err);
 
-      const institucion_medica = requireText("institucion_medica", "Institución médica");
+      const institucion_medica_tipo = requireText("institucion_medica_tipo", "Institución médica");
+      const nombreEstablecimiento =
+        institucion_medica_tipo === "IESS"
+          ? ""
+          : requireText("institucion_medica_nombre", "Nombre del establecimiento");
+      const institucion_medica = resolverInstitucionMedica(institucion_medica_tipo, nombreEstablecimiento);
       const medico_tratante = requireText("medico_tratante", "Médico tratante");
       const fecha_emision_certificado = requireText("fecha_emision_certificado", "Fecha de emisión del certificado");
       const diagnostico = requireText("diagnostico", "Diagnóstico");
@@ -201,6 +228,7 @@ export function JustificacionWizard() {
         cedula,
         carrera,
         fecha_inasistencia,
+        institucion_medica_tipo,
         institucion_medica,
         medico_tratante,
         fecha_emision_certificado,
@@ -294,6 +322,12 @@ export function JustificacionWizard() {
     const tipo_marcacion_omitida = requireText("tipo_marcacion_omitida", "Tipo de marcación omitida/fallida");
     const hora_real_ingreso = requireText("hora_real_ingreso", "Hora real de ingreso");
     const hora_real_salida = requireText("hora_real_salida", "Hora real de salida");
+    if (hora_real_ingreso < HORA_MINIMA_JORNADA || hora_real_ingreso > HORA_MAXIMA_JORNADA) {
+      throw new Error(`La hora de ingreso debe estar entre ${HORA_MINIMA_JORNADA} y ${HORA_MAXIMA_JORNADA}.`);
+    }
+    if (hora_real_salida < HORA_MINIMA_JORNADA || hora_real_salida > HORA_MAXIMA_JORNADA) {
+      throw new Error(`La hora de salida debe estar entre ${HORA_MINIMA_JORNADA} y ${HORA_MAXIMA_JORNADA}.`);
+    }
     const motivo_falta_registro = requireText("motivo_falta_registro", "Motivo de la falta de registro");
 
     const detalle: Record<string, unknown> = {
@@ -333,10 +367,8 @@ export function JustificacionWizard() {
 
   function validarAnexoArchivo() {
     if (!tipo) return null;
-    return (
-      validarAnexoObligatorio(tipo, anexo) ??
-      validarAnexoOpcional(anexo ? { size: anexo.size, type: anexo.type, name: anexo.name } : null)
-    );
+    const archivos = anexos.map((a) => ({ size: a.size, type: a.type, name: a.name }));
+    return validarAnexosObligatorio(tipo, archivos) ?? validarAnexosOpcional(archivos);
   }
 
   async function verVistaPrevia() {
@@ -427,7 +459,9 @@ export function JustificacionWizard() {
       fd.append("fecha_fin", m.fecha_fin);
       fd.append("motivo", m.motivo);
       fd.append("detalle_json", JSON.stringify(m.detalle));
-      if (anexo) fd.append("justificativo", anexo);
+      for (const archivo of anexos) {
+        fd.append("justificativo", archivo);
+      }
 
       const res = await crearSolicitudDesdeWizard(fd);
       if (!res.ok) {
@@ -436,19 +470,23 @@ export function JustificacionWizard() {
         return;
       }
       qualitySolicitud.complete(true);
+      setProcesandoNav(true);
       router.push("/solicitudes");
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo enviar la solicitud.");
       qualitySolicitud.complete(false);
     } finally {
-      setBusy(false);
+      if (!procesandoNav) setBusy(false);
     }
   }
 
   const tipoSeleccionado = tipo ? TIPOS.find((t) => t.id === tipo) : null;
 
   return (
-    <section className="stack">
+    <section className="stack page-enter">
+      {(busy || procesandoNav) ? (
+        <LoadingOverlay label={procesandoNav ? "Redirigiendo…" : "Enviando solicitud…"} />
+      ) : null}
       <PageHeader
         title="Nueva solicitud"
         subtitle="Flujo guiado: elige el tipo de trámite, completa el formulario y envía tu solicitud a revisión."
@@ -488,7 +526,7 @@ export function JustificacionWizard() {
                 onClick={() => {
                   setTipo(t.id);
                   setF({});
-                  setAnexo(null);
+                  setAnexos([]);
                   setError(null);
                 }}
               >
@@ -577,15 +615,32 @@ export function JustificacionWizard() {
                 <h3 style={{ margin: 0 }}>Datos del certificado médico</h3>
                 <div className="form-grid form-grid--2">
                   <Field label="Institución médica *">
-                    <select value={f.institucion_medica ?? ""} onChange={(e) => patchField("institucion_medica", e.target.value)} required>
+                    <select
+                      value={f.institucion_medica_tipo ?? ""}
+                      onChange={(e) => {
+                        patchField("institucion_medica_tipo", e.target.value);
+                        if (e.target.value === "IESS") patchField("institucion_medica_nombre", "");
+                      }}
+                      required
+                    >
                       <option value="">Seleccionar</option>
-                      <option value="IESS">IESS</option>
-                      <option value="Ministerio de Salud Pública">Ministerio de Salud Pública</option>
-                      <option value="Hospital privado">Hospital privado</option>
-                      <option value="Centro de salud">Centro de salud</option>
-                      <option value="Otro">Otro</option>
+                      {TIPOS_INSTITUCION_MEDICA.map((tipo) => (
+                        <option key={tipo} value={tipo}>
+                          {tipo}
+                        </option>
+                      ))}
                     </select>
                   </Field>
+                  {f.institucion_medica_tipo && f.institucion_medica_tipo !== "IESS" ? (
+                    <Field label="Nombre del establecimiento *" hint="Escriba el nombre del centro de atención.">
+                      <input
+                        value={f.institucion_medica_nombre ?? ""}
+                        onChange={(e) => patchField("institucion_medica_nombre", e.target.value)}
+                        placeholder="Ej: Hospital Metropolitano"
+                        required
+                      />
+                    </Field>
+                  ) : null}
                   <Field label="Médico tratante *">
                     <input value={f.medico_tratante ?? ""} onChange={(e) => patchField("medico_tratante", e.target.value)} placeholder="Dr. Juan Pérez" required />
                   </Field>
@@ -593,7 +648,13 @@ export function JustificacionWizard() {
                     <DateInput value={f.fecha_emision_certificado ?? ""} onChange={(e) => patchField("fecha_emision_certificado", e.target.value)} required />
                   </Field>
                   <Field label="Días de reposo" hint="Si no aplica, déjalo vacío (se usará el mismo día de la inasistencia).">
-                    <input value={f.dias_reposo ?? ""} onChange={(e) => patchField("dias_reposo", e.target.value)} placeholder="Ej: 3" inputMode="numeric" />
+                    <input
+                      value={f.dias_reposo ?? ""}
+                      onChange={(e) => patchField("dias_reposo", soloDigitos(e.target.value))}
+                      placeholder="Ej: 3"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                    />
                   </Field>
                 </div>
                 <Field label="Diagnóstico *">
@@ -697,20 +758,27 @@ export function JustificacionWizard() {
                 <Field label="Fecha del incidente *" hint="Fecha en que ocurrió el olvido o la falla del sistema.">
                   <DateInput value={f.fecha_incidente ?? ""} onChange={(e) => patchField("fecha_incidente", e.target.value)} required />
                 </Field>
-                <Field label="Tipo de marcación omitida/fallida *">
+                <Field label="Tipo de marcación omitida/fallida *" hint="Seleccione solo una: entrada o salida.">
                   <select value={f.tipo_marcacion_omitida ?? ""} onChange={(e) => patchField("tipo_marcacion_omitida", e.target.value)} required>
                     <option value="">Seleccionar</option>
                     <option value="entrada">Marcación de entrada</option>
                     <option value="salida">Marcación de salida</option>
-                    <option value="ambas">Ambas (entrada y salida)</option>
                   </select>
                 </Field>
                 <div className="form-grid form-grid--2">
-                  <Field label="Hora real de ingreso *">
-                    <input type="time" value={f.hora_real_ingreso ?? ""} onChange={(e) => patchField("hora_real_ingreso", e.target.value)} required />
+                  <Field label="Hora real de ingreso *" hint={`Horario permitido: ${HORA_MINIMA_JORNADA} a ${HORA_MAXIMA_JORNADA}.`}>
+                    <TimeInput
+                      value={f.hora_real_ingreso ?? ""}
+                      onChange={(e) => patchField("hora_real_ingreso", e.target.value)}
+                      required
+                    />
                   </Field>
-                  <Field label="Hora real de salida *">
-                    <input type="time" value={f.hora_real_salida ?? ""} onChange={(e) => patchField("hora_real_salida", e.target.value)} required />
+                  <Field label="Hora real de salida *" hint={`Horario permitido: ${HORA_MINIMA_JORNADA} a ${HORA_MAXIMA_JORNADA}.`}>
+                    <TimeInput
+                      value={f.hora_real_salida ?? ""}
+                      onChange={(e) => patchField("hora_real_salida", e.target.value)}
+                      required
+                    />
                   </Field>
                 </div>
                 <Field label="Motivo de la falta de registro *">
@@ -738,22 +806,15 @@ export function JustificacionWizard() {
               label={tipo === "enfermedad" ? "Adjuntar certificado o soporte médico *" : "Adjuntar documento de respaldo (opcional)"}
               hint={
                 tipo === "enfermedad"
-                  ? "Obligatorio. Certificado o soporte médico (PDF, PNG o JPG), además del oficio generado."
-                  : "Opcional. PDF, PNG o JPG como respaldo adicional al oficio generado."
+                  ? "Obligatorio. Puede adjuntar uno o más archivos (PDF, PNG o JPG), además del oficio generado."
+                  : "Opcional. Puede adjuntar uno o más archivos (PDF, PNG o JPG) como respaldo adicional al oficio generado."
               }
             >
-              <input
-                className="file-input"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                required={tipo === "enfermedad"}
-                onChange={(e) => setAnexo(e.target.files?.[0] ?? null)}
+              <MultiFileUpload
+                files={anexos}
+                onChange={setAnexos}
+                hint="Use «Agregar archivos» varias veces si desea subir documentos por separado."
               />
-              {anexo ? (
-                <p className="field-hint" style={{ marginTop: "0.35rem" }}>
-                  Archivo seleccionado: <strong>{anexo.name}</strong>
-                </p>
-              ) : null}
             </Field>
           </div>
 
@@ -763,23 +824,27 @@ export function JustificacionWizard() {
             Revise el documento generado antes de enviar la solicitud. El botón de envío se habilitará tras ver la vista previa.
           </p>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <button
-              className="btn btn--secondary"
+            <ActionButton
+              className="btn--secondary"
               type="button"
-              disabled={busy || busyPreview}
+              loading={busyPreview}
+              loadingLabel="Generando…"
+              disabled={busy}
               onClick={() => verVistaPrevia()}
             >
-              {busyPreview ? "Generando..." : "Vista previa del oficio"}
-            </button>
+              Vista previa del oficio
+            </ActionButton>
             {haVistoPrevia ? (
-              <button
-                className="btn btn--secondary"
+              <ActionButton
+                className="btn--secondary"
                 type="button"
-                disabled={busy || busyPreview}
+                loading={busyPreview}
+                loadingLabel="Descargando…"
+                disabled={busy}
                 onClick={() => descargarOficioDocx()}
               >
                 Descargar Word (.docx)
-              </button>
+              </ActionButton>
             ) : null}
           </div>
           {previewHtml ? (
@@ -800,15 +865,17 @@ export function JustificacionWizard() {
             <button className="btn btn--secondary" type="button" onClick={() => setStep(0)}>
               Atrás
             </button>
-            <button
-              className="btn btn--primary"
+            <ActionButton
+              className="btn--primary"
               type="button"
-              disabled={busy || !haVistoPrevia}
+              loading={busy || procesandoNav}
+              loadingLabel="Enviando…"
+              disabled={!haVistoPrevia || busyPreview}
               title={!haVistoPrevia ? "Genere la vista previa del oficio antes de enviar" : undefined}
               onClick={() => enviarSolicitud()}
             >
               Enviar solicitud
-            </button>
+            </ActionButton>
           </div>
         </article>
       ) : null}

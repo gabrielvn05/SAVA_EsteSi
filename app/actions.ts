@@ -90,10 +90,14 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
     id,
     user.id,
     esStaff,
-    "id, justificativo_path, justificativo_nombre, creado_por"
+    "id, justificativo_path, justificativo_nombre, creado_por, estado"
   );
 
   if (!actual) throw new Error("No se encontró la solicitud.");
+  if (actual.creado_por !== user.id) throw new Error("Solo puedes editar tus propias solicitudes.");
+  if (actual.estado !== "en_revision_secretaria") {
+    throw new Error("Esta solicitud ya no puede editarse porque avanzó en el proceso de aprobación.");
+  }
 
   let justificativoPath = actual.justificativo_path;
   let justificativoNombre = actual.justificativo_nombre;
@@ -109,7 +113,9 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
     justificativoNombre = nuevoArchivo.name;
   }
 
-  const { error } = await supabase
+  // Cliente admin: el UPDATE con sesión anon dispara RLS recursivo en Postgres ("stack depth limit exceeded").
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin
     .from("solicitudes")
     .update({
       tipo: getTextField(formData, "tipo", "justificacion"),
@@ -119,7 +125,8 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
       justificativo_path: justificativoPath,
       justificativo_nombre: justificativoNombre
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("creado_por", user.id);
 
   if (error) throw new Error(error.message);
 
@@ -152,10 +159,9 @@ export async function revisarSolicitud(id: string, aprobado: boolean, observacio
       estado: nuevoEstado,
       revisado_por: user.id,
       observaciones_secretaria: observacion || null,
-      ...(nuevoEstado === "aprobada"
+      ...(nuevoEstado === "aprobada" && creador.rol === "decano"
         ? { firmado_por: user.id, fecha_firma: ahora, observaciones_decano: observacion || null }
-        : {}),
-      ...(nuevoEstado === "rechazada" ? { observaciones_decano: observacion || null } : {})
+        : {})
     })
     .eq("id", id);
 
@@ -613,12 +619,27 @@ export async function crearSolicitudDesdeWizard(formData: FormData): Promise<Cre
     const justificativoPath = oficioPath;
     const justificativoNombre = nombreOficio;
 
-    const archivo = formData.get("justificativo") as File | null;
-    if (archivo && archivo.size > 0) {
-      const anexoPath = `${user.id}/${Date.now()}_${normalizeFileName(archivo.name)}`;
-      const { error: anexoError } = await supabase.storage.from("justificativos").upload(anexoPath, archivo, { upsert: false });
-      if (anexoError) return { ok: false, error: anexoError.message };
-      detalle = { ...detalle, anexo_path: anexoPath, anexo_nombre: archivo.name };
+    const archivos = formData
+      .getAll("justificativo")
+      .filter((f): f is File => f instanceof File && f.size > 0);
+
+    if (archivos.length > 0) {
+      const anexos: Array<{ path: string; nombre: string }> = [];
+      for (let i = 0; i < archivos.length; i++) {
+        const archivo = archivos[i];
+        const anexoPath = `${user.id}/${Date.now()}_${i}_${normalizeFileName(archivo.name)}`;
+        const { error: anexoError } = await supabase.storage.from("justificativos").upload(anexoPath, archivo, {
+          upsert: false
+        });
+        if (anexoError) return { ok: false, error: anexoError.message };
+        anexos.push({ path: anexoPath, nombre: archivo.name });
+      }
+      detalle = {
+        ...detalle,
+        anexos,
+        anexo_path: anexos[0].path,
+        anexo_nombre: anexos[0].nombre
+      };
     } else if (tipo === "enfermedad") {
       return { ok: false, error: "Debe adjuntar el documento de respaldo (certificado o soporte médico)." };
     }
