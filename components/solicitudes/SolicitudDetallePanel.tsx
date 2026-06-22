@@ -218,7 +218,6 @@ export function SolicitudDetallePanel({
         anexoNombre={solicitud.anexo_nombre}
         anexoUrl={solicitud.anexo_url}
         anexos={solicitud.anexos}
-        solicitudId={solicitud.solicitud_id}
       />
 
       {observacionRechazo ? (
