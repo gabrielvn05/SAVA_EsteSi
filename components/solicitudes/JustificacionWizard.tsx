@@ -25,6 +25,8 @@ import { soloDigitos } from "@/lib/form-validators";
 import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { MultiFileUpload } from "@/components/ui/MultiFileUpload";
+import { EmergentAlertModal } from "@/components/ui/EmergentAlertModal";
+import { DocumentViewer } from "@/components/ui/DocumentViewer";
 import { HORA_MAXIMA_JORNADA, HORA_MINIMA_JORNADA, TimeInput } from "@/components/ui/TimeInput";
 
 type Tipo = "enfermedad" | "viaje" | "calamidad_domestica" | "falta_marcado";
@@ -120,7 +122,7 @@ export function JustificacionWizard() {
   const [busy, setBusy] = useState(false);
   const [busyPreview, setBusyPreview] = useState(false);
   const [procesandoNav, setProcesandoNav] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string | null>(null);
   const [haVistoPrevia, setHaVistoPrevia] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [perfilDocente, setPerfilDocente] = useState<{
@@ -173,7 +175,10 @@ export function JustificacionWizard() {
   }, []);
 
   useEffect(() => {
-    setPreviewHtml(null);
+    setPreviewPdfUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setHaVistoPrevia(false);
   }, [f, tipo]);
 
@@ -393,8 +398,12 @@ export function JustificacionWizard() {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(j.error ?? "No se pudo generar la vista previa.");
       }
-      const html = await res.text();
-      setPreviewHtml(html);
+      const blob = await res.blob();
+      if (!blob.size) throw new Error("La vista previa PDF está vacía.");
+      setPreviewPdfUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(blob);
+      });
       setHaVistoPrevia(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo generar la vista previa.");
@@ -504,11 +513,13 @@ export function JustificacionWizard() {
 
       <Progress step={step} />
 
-      {error ? (
-        <div className="alert alert--error" role="alert">
-          {error}
-        </div>
-      ) : null}
+      <EmergentAlertModal
+        open={Boolean(error)}
+        title="Revise los datos"
+        message={error ?? ""}
+        variant="error"
+        onClose={() => setError(null)}
+      />
 
       {step === 0 ? (
         <article className="card stack">
@@ -847,17 +858,16 @@ export function JustificacionWizard() {
               </ActionButton>
             ) : null}
           </div>
-          {previewHtml ? (
-            <iframe
+          {previewPdfUrl && perfilDocente && tipo ? (
+            <DocumentViewer
               title="Vista previa del oficio"
-              srcDoc={previewHtml}
-              style={{
-                width: "100%",
-                minHeight: 480,
-                border: "1px solid var(--color-border)",
-                borderRadius: 8,
-                background: "#fff"
-              }}
+              fileName={nombreArchivoOficio(buildCodigoTramite(tipo, perfilDocente.nombres, perfilDocente.apellidos)).replace(
+                /\.docx$/i,
+                ".pdf"
+              )}
+              src={previewPdfUrl}
+              downloadHref={previewPdfUrl}
+              direct
             />
           ) : null}
 

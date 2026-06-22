@@ -4,9 +4,9 @@ import { getUserProfile, requireAuth } from "@/lib/auth";
 import { fetchDecanoOficioDestinatario } from "@/lib/certificado/fetch-decano-oficio";
 import { resolveSolicitanteCertificado } from "@/lib/certificado/resolve-solicitante";
 import { parseTipoPersonal } from "@/lib/certificado/tipo-personal";
-import { renderOficioHtml } from "@/lib/certificado/render-oficio-html";
 import type { CertificadoTipo } from "@/lib/certificado/build-certificado-pdf";
 import { fetchSolicitudParaUsuario } from "@/lib/solicitud-access";
+import { buildOficioPreviewPdf, docxBufferToPreviewPdf } from "@/lib/certificado/docx-buffer-to-preview-pdf";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ function isTipo(v: string): v is CertificadoTipo {
   return (TIPOS as string[]).includes(v);
 }
 
-/** Vista previa HTML del oficio guardado en una solicitud existente. */
+/** Vista previa PDF del oficio guardado (desde el DOCX almacenado). */
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const { user } = await requireAuth();
   const profile = await getUserProfile(user.id);
@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     params.id,
     user.id,
     esStaff,
-    "id, tipo, fecha_inicio, fecha_fin, motivo, detalle, creado_por, profiles:creado_por(nombres, apellidos)"
+    "id, tipo, fecha_inicio, fecha_fin, motivo, detalle, creado_por, justificativo_path, profiles:creado_por(nombres, apellidos)"
   );
 
   if (!data || !isTipo(data.tipo)) {
@@ -52,29 +52,50 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       ? (data.detalle as Record<string, unknown>)
       : {};
 
-  const solicitante = await resolveSolicitanteCertificado(data.creado_por, undefined, {});
-  const tipoPersonal = parseTipoPersonal(detalle.tipo_personal);
-  const destinatario = await fetchDecanoOficioDestinatario();
+  const admin = createSupabaseAdminClient();
+  let pdf: Buffer | null = null;
 
-  const html = renderOficioHtml(
-    {
-      solicitante: {
-        nombres: profiles?.nombres ?? solicitante.nombres,
-        apellidos: profiles?.apellidos ?? solicitante.apellidos,
-        email: solicitante.email
-      },
-      tipo: data.tipo,
-      tipo_personal: tipoPersonal,
-      fecha_inicio: data.fecha_inicio,
-      fecha_fin: data.fecha_fin,
-      motivo: data.motivo,
-      detalle
-    },
-    destinatario
-  );
+  if (data.justificativo_path) {
+    const { data: archivo, error: dlErr } = await admin.storage
+      .from("justificativos")
+      .download(data.justificativo_path);
+    if (!dlErr && archivo) {
+      const docx = Buffer.from(await archivo.arrayBuffer());
+      pdf = await docxBufferToPreviewPdf(docx);
+    }
+  }
 
-  return new NextResponse(html, {
+  if (!pdf) {
+    const solicitante = await resolveSolicitanteCertificado(data.creado_por, undefined, {});
+    const tipoPersonal = parseTipoPersonal(detalle.tipo_personal);
+    const destinatario = await fetchDecanoOficioDestinatario();
+    try {
+      pdf = await buildOficioPreviewPdf(
+        {
+          solicitante: {
+            nombres: profiles?.nombres ?? solicitante.nombres,
+            apellidos: profiles?.apellidos ?? solicitante.apellidos,
+            email: solicitante.email
+          },
+          tipo: data.tipo,
+          tipo_personal: tipoPersonal,
+          fecha_inicio: data.fecha_inicio,
+          fecha_fin: data.fecha_fin,
+          motivo: data.motivo,
+          detalle
+        },
+        destinatario
+      );
+    } catch {
+      return NextResponse.json({ error: "No se pudo generar la vista previa PDF." }, { status: 500 });
+    }
+  }
+
+  return new NextResponse(pdf, {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8" }
+    headers: {
+      "Content-Type": "application/pdf",
+      "Cache-Control": "no-store"
+    }
   });
 }

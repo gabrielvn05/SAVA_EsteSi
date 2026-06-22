@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { SolicitudTimeline } from "@/components/solicitudes/SolicitudTimeline";
 import { SolicitudVistaPrevia } from "@/components/solicitudes/SolicitudVistaPrevia";
 import { LoadingOverlay } from "@/components/ui/LoadingOverlay";
+import { EmergentAlertModal } from "@/components/ui/EmergentAlertModal";
 import { ActionButton } from "@/components/ui/ActionButton";
 import { LoadingLink } from "@/components/ui/LoadingLink";
 import { observacionRechazoVisible } from "@/lib/solicitud-observaciones";
@@ -141,6 +142,32 @@ export function SolicitudDetallePanel({
     <section className="stack solicitud-detalle-panel">
       {procesando ? <LoadingOverlay label="Procesando solicitud…" /> : null}
 
+      <EmergentAlertModal
+        open={Boolean(error)}
+        title="No se pudo completar"
+        message={error ?? ""}
+        variant="error"
+        onClose={() => setError(null)}
+      />
+
+      <EmergentAlertModal
+        open={resultado === "aprobada"}
+        title="Solicitud procesada"
+        message="La solicitud fue procesada correctamente."
+        variant="success"
+        confirmLabel="Cerrar"
+        onClose={() => setResultado(null)}
+      />
+
+      <EmergentAlertModal
+        open={resultado === "rechazada"}
+        title="Solicitud rechazada"
+        message="La solicitud fue rechazada y el motivo quedó registrado."
+        variant="warning"
+        confirmLabel="Cerrar"
+        onClose={() => setResultado(null)}
+      />
+
       <div className="tramite-header-bar">
         <LoadingLink
           href={esStaff ? "/solicitudes/proceso-aprobacion" : "/solicitudes"}
@@ -161,24 +188,6 @@ export function SolicitudDetallePanel({
           <strong>Fecha de ingreso:</strong> {ingresoFmt}
         </span>
       </div>
-
-      {resultado === "aprobada" ? (
-        <div className="alert alert--success" role="status">
-          Solicitud procesada correctamente.
-        </div>
-      ) : null}
-
-      {resultado === "rechazada" ? (
-        <div className="alert alert--warning" role="status">
-          Solicitud rechazada.
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="alert alert--error" role="alert">
-          {error}
-        </div>
-      ) : null}
 
       <article className="card stack">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>

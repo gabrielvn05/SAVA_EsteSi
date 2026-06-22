@@ -39,7 +39,7 @@ export function SolicitudTimeline({ events }: Props) {
           <div
             key={event.id}
             role="listitem"
-            className={`tramite-timeline__item tramite-timeline__item--${event.status}${isLast ? " tramite-timeline__item--last" : ""}`}
+            className={`tramite-timeline__item tramite-timeline__item--${event.status}${isLast ? " tramite-timeline__item--last" : ""}${event.id === "final" && event.status === "completed" ? " tramite-timeline__item--approved" : ""}`}
           >
             <div className="tramite-timeline__track">
               {!isLast ? <div className={lineClass} aria-hidden /> : null}
@@ -59,6 +59,12 @@ export function SolicitudTimeline({ events }: Props) {
                 ) : null}
                 {event.status === "pending" ? (
                   <span className="tramite-timeline__badge tramite-timeline__badge--pending">Pendiente</span>
+                ) : null}
+                {event.id === "final" && event.status === "completed" ? (
+                  <span className="tramite-timeline__badge tramite-timeline__badge--success">Aprobado</span>
+                ) : null}
+                {event.id === "final" && event.status === "rejected" ? (
+                  <span className="tramite-timeline__badge tramite-timeline__badge--rejected">Rechazado</span>
                 ) : null}
               </div>
               <p className="tramite-timeline__fecha">Fecha: {formatDisplayDate(event.fecha)}</p>

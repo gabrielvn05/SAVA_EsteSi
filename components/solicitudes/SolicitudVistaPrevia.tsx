@@ -5,6 +5,7 @@ import {
   justificativoEsPdf
 } from "@/lib/solicitud-preview";
 import { OficioPreviewLazy } from "@/components/solicitudes/OficioPreviewLazy";
+import { DocumentViewer } from "@/components/ui/DocumentViewer";
 type Props = Readonly<{
   codigoTramite: string;
   oficioPreviewHtml: string | null;
@@ -32,22 +33,17 @@ function BloqueAdjunto({
   const esImagen = justificativoEsImagen(nombre);
 
   return (
-    <div className="solicitud-preview__adjunto stack">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0, fontSize: "0.95rem" }}>{titulo}</h3>
-        <a href={url} download={nombre ?? undefined} className="btn btn--secondary btn--sm">
-          Descargar
-        </a>
-      </div>
+    <div className="stack" style={{ gap: "0.5rem" }}>
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>{titulo}</h3>
       <p className="field-hint" style={{ margin: 0 }}>
         {nombre}
       </p>
       {esPdf ? (
-        <iframe title={titulo} src={url} className="solicitud-preview__iframe" />
+        <DocumentViewer title={titulo} fileName={nombre ?? "documento.pdf"} src={url} downloadHref={url} direct />
       ) : esImagen ? (
-        <img src={url} alt={nombre ?? titulo} className="solicitud-preview__imagen" />
+        <DocumentViewer title={titulo} fileName={nombre ?? "imagen"} src={url} downloadHref={url} direct kind="image" />
       ) : (
-        <p className="field-hint">Vista previa no disponible para este formato. Use el botón de descarga.</p>
+        <p className="field-hint">Vista previa no disponible para este formato. Use el botón de descarga del visor.</p>
       )}
     </div>
   );
@@ -110,7 +106,6 @@ export function SolicitudVistaPrevia({
           justificativoUrl={justificativoUrl}
           justificativoNombre={justificativoNombre}
           nombreDescarga={nombreDescarga}
-          initialHtml={oficioPreviewHtml}
         />
       ) : null}
       {adjuntos.map((anexo, index) => (

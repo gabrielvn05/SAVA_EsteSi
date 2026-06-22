@@ -1,9 +1,8 @@
 import { PageHeader } from "@/components/PageHeader";
+import { SolicitudesCuentaTable } from "@/components/admin/SolicitudesCuentaTable";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getUserProfile, requireAuth } from "@/lib/auth";
-import { aprobarSolicitudCuenta, rechazarSolicitudCuenta } from "@/app/actions";
-import { labelCarrera } from "@/lib/carreras";
-import { labelRolSistema, puedeAprobarSolicitudCuenta } from "@/lib/rol-labels";
+import { puedeAprobarSolicitudCuenta } from "@/lib/rol-labels";
 import { unstable_noStore as noStore } from "next/cache";
 
 export default async function SolicitudesCuentaPage() {
@@ -68,83 +67,12 @@ export default async function SolicitudesCuentaPage() {
         </article>
       ) : null}
 
-      <article className="card card--flat">
-        <div className="table-wrap">
-          <table className="data-table data-table--compact">
-            <thead>
-              <tr>
-                <th>Solicitante</th>
-                <th>Cédula</th>
-                <th>Correo</th>
-                <th>Celular</th>
-                <th>Carrera</th>
-                <th>Rol</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: "center", color: "var(--color-text-muted)" }}>
-                    No hay solicitudes.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <strong>
-                        {r.nombres} {r.apellidos}
-                      </strong>
-                    </td>
-                    <td>{r.cedula || "—"}</td>
-                    <td>{r.email}</td>
-                    <td>{r.celular || "—"}</td>
-                    <td>{labelCarrera(r.carrera)}</td>
-                    <td>{labelRolSistema(r.rol_solicitado)}</td>
-                    <td>{r.status}</td>
-                    <td>
-                      <div className="cell-actions">
-                        {r.status === "pendiente" ? (
-                          <>
-                            {puedeAceptar ? (
-                              <form action={aprobarSolicitudCuenta}>
-                                <input type="hidden" name="request_id" value={r.id} />
-                                <button className="btn btn--success btn--sm" type="submit">
-                                  Aceptar
-                                </button>
-                              </form>
-                            ) : null}
-
-                            {esDecano || esSecretaria || esSuper ? (
-                              <form action={rechazarSolicitudCuenta} className="stack" style={{ width: 200 }}>
-                                <input type="hidden" name="request_id" value={r.id} />
-                                <textarea
-                                  name="comentario"
-                                  placeholder="Motivo de rechazo (opcional)"
-                                  rows={2}
-                                  required={esSecretaria}
-                                  style={{ width: "100%", resize: "vertical" }}
-                                />
-                                <button className="btn btn--danger btn--sm" type="submit">
-                                  Rechazar
-                                </button>
-                              </form>
-                            ) : null}
-                          </>
-                        ) : (
-                          <span className="field-hint">Sin acciones</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </article>
+      <SolicitudesCuentaTable
+        rows={rows}
+        puedeAceptar={puedeAceptar}
+        puedeRechazar={esDecano || esSecretaria || esSuper}
+        comentarioRechazoObligatorio={esSecretaria}
+      />
     </section>
   );
 }

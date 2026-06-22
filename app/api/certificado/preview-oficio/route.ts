@@ -5,7 +5,7 @@ import type { CertificadoTipo } from "@/lib/certificado/build-certificado-pdf";
 import { fetchDecanoOficioDestinatario } from "@/lib/certificado/fetch-decano-oficio";
 import { resolveSolicitanteCertificado } from "@/lib/certificado/resolve-solicitante";
 import { parseTipoPersonal } from "@/lib/certificado/tipo-personal";
-import { renderOficioHtml } from "@/lib/certificado/render-oficio-html";
+import { buildOficioPreviewPdf } from "@/lib/certificado/docx-buffer-to-preview-pdf";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   detalleInstitucionalDesdePerfil,
@@ -21,7 +21,7 @@ function isTipo(v: unknown): v is CertificadoTipo {
   return typeof v === "string" && (TIPOS as string[]).includes(v);
 }
 
-/** Vista previa HTML del oficio antes de enviar la solicitud. */
+/** Vista previa PDF del oficio (mismo contenido que el Word descargable). */
 export async function POST(req: Request) {
   const supabase = createSupabaseRouteHandlerClient();
   const {
@@ -72,27 +72,35 @@ export async function POST(req: Request) {
   const md = (user.user_metadata ?? {}) as Record<string, unknown>;
   const solicitante = await resolveSolicitanteCertificado(user.id, user.email, md);
   const tipoPersonal = parseTipoPersonal(detalle.tipo_personal);
-
   const destinatario = await fetchDecanoOficioDestinatario();
-  const html = renderOficioHtml(
-    {
-      solicitante: {
-        nombres: profile.nombres ?? solicitante.nombres,
-        apellidos: profile.apellidos ?? solicitante.apellidos,
-        email: solicitante.email
-      },
-      tipo: body.tipo,
-      tipo_personal: tipoPersonal,
-      fecha_inicio,
-      fecha_fin,
-      motivo,
-      detalle
-    },
-    destinatario
-  );
 
-  return new NextResponse(html, {
-    status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8" }
-  });
+  try {
+    const pdf = await buildOficioPreviewPdf(
+      {
+        solicitante: {
+          nombres: profile.nombres ?? solicitante.nombres,
+          apellidos: profile.apellidos ?? solicitante.apellidos,
+          email: solicitante.email
+        },
+        tipo: body.tipo,
+        tipo_personal: tipoPersonal,
+        fecha_inicio,
+        fecha_fin,
+        motivo,
+        detalle
+      },
+      destinatario
+    );
+
+    return new NextResponse(pdf, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Cache-Control": "no-store"
+      }
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "No se pudo generar la vista previa PDF.";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

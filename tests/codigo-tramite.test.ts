@@ -69,4 +69,17 @@ describe("buildSolicitudTimeline fases completas", () => {
     expect(events[1].status).toBe("rejected");
     expect(events[3].label).toBe("Trámite rechazado");
   });
+
+  it("marca aprobación final", () => {
+    const events = buildSolicitudTimeline({
+      estado: "aprobada",
+      created_at: "2026-06-01T10:00:00.000Z",
+      updated_at: "2026-06-02T10:00:00.000Z",
+      fecha_firma: "2026-06-02T10:00:00.000Z",
+      revisado_por: "uuid-secretaria",
+      firmado_por: "uuid-decano"
+    });
+    expect(events[3].label).toBe("Trámite aprobado");
+    expect(events[3].status).toBe("completed");
+  });
 });
