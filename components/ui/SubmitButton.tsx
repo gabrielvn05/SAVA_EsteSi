@@ -1,19 +1,28 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { type ReactNode } from "react";
 import { ActionButton } from "@/components/ui/ActionButton";
 
 type Props = Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   loadingLabel?: string;
+  loading?: boolean;
 }>;
 
-export function SubmitButton({ children, className = "btn--primary", loadingLabel }: Props) {
-  const { pending } = useFormStatus();
-
+export function SubmitButton({
+  children,
+  className = "btn--primary",
+  loadingLabel,
+  loading = false
+}: Props) {
   return (
-    <ActionButton type="submit" className={className} loading={pending} loadingLabel={loadingLabel ?? "Procesando…"}>
+    <ActionButton
+      type="submit"
+      className={className}
+      loading={loading}
+      loadingLabel={loadingLabel ?? "Procesando…"}
+    >
       {children}
     </ActionButton>
   );
