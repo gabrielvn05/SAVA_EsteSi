@@ -22,7 +22,7 @@ export function DocumentViewer({
   kind = "pdf"
 }: Props) {
   const [frameSrc, setFrameSrc] = useState<string | null>(direct && kind === "pdf" ? src : null);
-  const [loading, setLoading] = useState(!direct || kind !== "pdf");
+  const [loading, setLoading] = useState(kind === "pdf" && !direct);
   const [error, setError] = useState<string | null>(null);
 
   const displayName = useMemo(() => fileName || title, [fileName, title]);
@@ -114,7 +114,16 @@ export function DocumentViewer({
 
         {!loading && !error && kind === "image" ? (
           <div className="doc-viewer__image-wrap">
-            <img src={src} alt={displayName} className="doc-viewer__image" />
+            <img
+              src={src}
+              alt={displayName}
+              className="doc-viewer__image"
+              onLoad={() => setLoading(false)}
+              onError={() => {
+                setLoading(false);
+                setError("No se pudo cargar la imagen.");
+              }}
+            />
           </div>
         ) : null}
       </div>

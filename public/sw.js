@@ -1,4 +1,4 @@
-const CACHE_STATIC = "sava-static-v4";
+const CACHE_STATIC = "sava-static-v5";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -19,15 +19,13 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
-  // Nunca cachear navegación ni API: la sesión depende siempre de la red.
+  // Nunca cachear navegación, API ni chunks de Next.js (cambian en cada build).
   if (event.request.mode === "navigate") return;
   if (url.pathname.startsWith("/api/")) return;
   if (url.pathname.startsWith("/auth/")) return;
+  if (url.pathname.startsWith("/_next/")) return;
 
-  const isStatic =
-    url.pathname.startsWith("/_next/static/") ||
-    url.pathname.startsWith("/branding/") ||
-    url.pathname.endsWith(".webmanifest");
+  const isStatic = url.pathname.startsWith("/branding/") || url.pathname.endsWith(".webmanifest");
 
   if (!isStatic) return;
 

@@ -88,7 +88,7 @@ export default async function SolicitudDetallePage({ params }: Readonly<{ params
         justificativo_url: justificativoUrl,
         anexo_nombre: anexoNombre,
         anexo_url: anexoUrl,
-        anexos: anexosResueltos.map((a) => ({ nombre: a.nombre, url: a.url })),
+        anexos: anexosResueltos.map((a) => ({ path: a.path, nombre: a.nombre, url: a.url })),
         created_at: data.created_at,
         updated_at: data.updated_at,
         fecha_firma: data.fecha_firma,

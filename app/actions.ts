@@ -24,6 +24,7 @@ import {
 } from "@/lib/perfil-institucional";
 import { buildCodigoTramite, nombreArchivoOficio } from "@/lib/codigo-tramite";
 import { fetchSolicitudParaUsuario } from "@/lib/solicitud-access";
+import { validarAnexoOpcional } from "@/lib/certificado/anexo-validators";
 
 function normalizeFileName(fileName: string) {
   return fileName.replaceAll(/[^a-zA-Z0-9.\-_]/g, "_");
@@ -90,7 +91,7 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
     id,
     user.id,
     esStaff,
-    "id, justificativo_path, justificativo_nombre, creado_por, estado"
+    "id, justificativo_path, justificativo_nombre, detalle, creado_por, estado"
   );
 
   if (!actual) throw new Error("No se encontró la solicitud.");
@@ -99,18 +100,38 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
     throw new Error("Esta solicitud ya no puede editarse porque avanzó en el proceso de aprobación.");
   }
 
-  let justificativoPath = actual.justificativo_path;
-  let justificativoNombre = actual.justificativo_nombre;
-  const nuevoArchivo = formData.get("justificativo") as File | null;
+  const detalleActual = ((actual.detalle as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const anexosActuales = Array.isArray(detalleActual.anexos)
+    ? (detalleActual.anexos as Array<{ path: string; nombre: string }>).filter((a) => a?.path && a?.nombre)
+    : [];
 
-  if (nuevoArchivo && nuevoArchivo.size > 0) {
-    const nuevoPath = `${user.id}/${Date.now()}_${normalizeFileName(nuevoArchivo.name)}`;
-    const { error: uploadError } = await supabase.storage.from("justificativos").upload(nuevoPath, nuevoArchivo, {
-      upsert: false
-    });
-    if (uploadError) throw new Error(uploadError.message);
-    justificativoPath = nuevoPath;
-    justificativoNombre = nuevoArchivo.name;
+  const nuevosArchivos = formData
+    .getAll("anexos")
+    .filter((f): f is File => f instanceof File && f.size > 0);
+
+  let detalleActualizado = { ...detalleActual };
+  let anexos = [...anexosActuales];
+
+  if (nuevosArchivos.length > 0) {
+    for (let i = 0; i < nuevosArchivos.length; i++) {
+      const archivo = nuevosArchivos[i];
+      const err = validarAnexoOpcional({ size: archivo.size, type: archivo.type, name: archivo.name });
+      if (err) throw new Error(err);
+
+      const anexoPath = `${user.id}/${Date.now()}_${i}_${normalizeFileName(archivo.name)}`;
+      const { error: uploadError } = await supabase.storage.from("justificativos").upload(anexoPath, archivo, {
+        upsert: false
+      });
+      if (uploadError) throw new Error(uploadError.message);
+      anexos.push({ path: anexoPath, nombre: archivo.name });
+    }
+
+    detalleActualizado = {
+      ...detalleActualizado,
+      anexos,
+      anexo_path: anexos[0]?.path ?? null,
+      anexo_nombre: anexos[0]?.nombre ?? null
+    };
   }
 
   // Cliente admin: el UPDATE con sesión anon dispara RLS recursivo en Postgres ("stack depth limit exceeded").
@@ -122,8 +143,7 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
       fecha_inicio: fechaInicioValue,
       fecha_fin: getTextField(formData, "fecha_fin"),
       motivo: getTextField(formData, "motivo"),
-      justificativo_path: justificativoPath,
-      justificativo_nombre: justificativoNombre
+      detalle: detalleActualizado
     })
     .eq("id", id)
     .eq("creado_por", user.id);
@@ -132,7 +152,59 @@ export async function actualizarSolicitud(id: string, formData: FormData) {
 
   revalidatePath("/solicitudes");
   revalidatePath(`/solicitudes/${id}`);
-  redirect("/solicitudes");
+  redirect(`/solicitudes/${id}`);
+}
+
+export async function eliminarAnexoSolicitud(solicitudId: string, anexoPath: string) {
+  const { user } = await requireAuth();
+  const profile = await getUserProfile(user.id);
+  const esStaff =
+    profile.rol === "secretaria" || profile.rol === "decano" || profile.rol === "superusuario";
+
+  const actual = await fetchSolicitudParaUsuario(
+    solicitudId,
+    user.id,
+    esStaff,
+    "id, detalle, creado_por, estado"
+  );
+
+  if (!actual) throw new Error("No se encontró la solicitud.");
+  if (actual.creado_por !== user.id) throw new Error("Solo puedes eliminar documentos de tus propias solicitudes.");
+  if (actual.estado !== "en_revision_secretaria") {
+    throw new Error("Esta solicitud ya no permite eliminar documentos.");
+  }
+
+  const path = anexoPath.trim();
+  if (!path) throw new Error("Documento no válido.");
+
+  const detalle = ((actual.detalle as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
+  const lista = Array.isArray(detalle.anexos)
+    ? (detalle.anexos as Array<{ path: string; nombre: string }>)
+    : [];
+
+  const anexos = lista.filter((a) => a.path !== path);
+  if (anexos.length === lista.length) throw new Error("El documento no existe en esta solicitud.");
+
+  const admin = createSupabaseAdminClient();
+  await admin.storage.from("justificativos").remove([path]);
+
+  const detalleActualizado = {
+    ...detalle,
+    anexos,
+    anexo_path: anexos[0]?.path ?? null,
+    anexo_nombre: anexos[0]?.nombre ?? null
+  };
+
+  const { error } = await admin
+    .from("solicitudes")
+    .update({ detalle: detalleActualizado })
+    .eq("id", solicitudId)
+    .eq("creado_por", user.id);
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/solicitudes");
+  revalidatePath(`/solicitudes/${solicitudId}`);
 }
 
 export async function revisarSolicitud(id: string, aprobado: boolean, observacion: string) {

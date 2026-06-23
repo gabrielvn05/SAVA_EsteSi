@@ -1439,6 +1439,28 @@ label {
   opacity: 0;
 }
 
+.time-input-custom {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.time-input-custom__part {
+  flex: 1;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font: inherit;
+}
+
+.time-input-custom__sep {
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
 .password-input-wrap {
   position: relative;
   display: flex;

@@ -57,6 +57,7 @@ export function detalleInstitucionalDesdePerfil(p: PerfilInstitucional): Record<
     tipo_personal: p.tipo_personal,
     cedula: p.cedula,
     carrera: p.carrera,
+    carrera_label: labelCarrera(p.carrera),
     jornada: p.jornada
   };
 }

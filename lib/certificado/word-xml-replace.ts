@@ -1,5 +1,6 @@
 import { FACULTAD_DEFAULT } from "@/lib/certificado/constants";
 import type { BuildCertificadoInput } from "@/lib/certificado/build-certificado-pdf";
+import { labelCarrera } from "@/lib/carreras";
 import {
   formatFechaOficio,
   formatRangoFechas,
@@ -55,6 +56,18 @@ export function replaceSequentialInXml(xml: string, marker: string, values: stri
   return out;
 }
 
+function carreraParaOficio(d: Record<string, unknown>) {
+  return labelCarrera(d.carrera_label ?? d.carrera);
+}
+
+/** Reemplaza [Nombre] aunque Word lo parta en varios nodos <w:t>. */
+export function replaceBracketPlaceholder(xml: string, name: string, value: string): string {
+  const escaped = escapeXml(value);
+  let out = replaceAll(xml, [[`[${name}]`, escaped]]);
+  const re = new RegExp(`\\[(?:[^\\[\\]]|<[^>]+>)*${name}(?:[^\\[\\]]|<[^>]+>)*\\]`, "gi");
+  return out.replace(re, escaped);
+}
+
 function applyCommonReplacements(
   xml: string,
   destinatario: OficioDestinatario,
@@ -62,8 +75,9 @@ function applyCommonReplacements(
   d: Record<string, unknown>
 ) {
   const decanoNombre = `${destinatario.nombres} ${destinatario.apellidos}`.trim();
+  const carreraLabel = carreraParaOficio(d);
 
-  return replaceAll(xml, [
+  let out = replaceAll(xml, [
     ["FCVT-MMAAAA-NNNN", escapeXml(r.numero_oficio)],
     ["FCVT-032026-0005", escapeXml(r.numero_oficio)],
     [
@@ -77,7 +91,8 @@ function applyCommonReplacements(
     ["[Nombre completo del docente]", escapeXml(r.nombre_docente)],
     ["[Número de cédula]", escapeXml(r.cedula)],
     ["[Cédula]", escapeXml(r.cedula)],
-    ["[Carrera]", escapeXml(str(d.carrera))],
+    ["[Carrera]", escapeXml(carreraLabel)],
+    ["docente de la [Carrera] de la", escapeXml(`docente de la ${carreraLabel} de la`)],
     ["[facultad]", escapeXml(FACULTAD_DEFAULT)],
     ["la [facultad]", escapeXml(`la ${FACULTAD_DEFAULT}`)],
     ["[Facultad]", escapeXml(FACULTAD_DEFAULT)],
@@ -95,6 +110,9 @@ function applyCommonReplacements(
     ["Ciencias de la vida y ", escapeXml(`${FACULTAD_DEFAULT} `)],
     ["tecnologias", ""]
   ]);
+
+  out = replaceBracketPlaceholder(out, "Carrera", carreraLabel);
+  return out;
 }
 
 function applyViajeReplacements(xml: string, d: Record<string, unknown>) {

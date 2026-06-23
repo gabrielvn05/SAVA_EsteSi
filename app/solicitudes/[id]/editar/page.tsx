@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { isoDateUTC, threeMonthsAgoUTC } from "@/lib/fechas";
 import { fetchSolicitudParaUsuario } from "@/lib/solicitud-access";
+import { anexosDesdeDetalle } from "@/lib/solicitud-anexos";
 
 type Params = { id: string };
 
@@ -13,12 +14,13 @@ export default async function EditarSolicitudPage({ params }: Readonly<{ params:
   const esStaff =
     profile.rol === "secretaria" || profile.rol === "decano" || profile.rol === "superusuario";
   const minFechaInicio = isoDateUTC(threeMonthsAgoUTC());
+  const supabaseBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
   const data = await fetchSolicitudParaUsuario(
     params.id,
     user.id,
     esStaff,
-    "id, tipo, fecha_inicio, fecha_fin, motivo, justificativo_nombre, creado_por, estado"
+    "id, tipo, fecha_inicio, fecha_fin, motivo, justificativo_nombre, detalle, creado_por, estado"
   );
 
   if (!data) {
@@ -40,13 +42,14 @@ export default async function EditarSolicitudPage({ params }: Readonly<{ params:
     );
   }
 
+  const anexos = anexosDesdeDetalle((data.detalle as Record<string, unknown> | null) ?? null, supabaseBase);
   const updateAction = actualizarSolicitud.bind(null, params.id);
 
   return (
     <section className="stack">
       <PageHeader
         title="Editar solicitud"
-        subtitle="Actualiza los datos o reemplaza el justificativo."
+        subtitle="Actualiza los datos o agrega documentos de respaldo adicionales."
         actions={
           <Link href={`/solicitudes/${params.id}`} className="btn btn--secondary">
             Ver detalle
@@ -88,16 +91,38 @@ export default async function EditarSolicitudPage({ params }: Readonly<{ params:
             <label htmlFor="motivo">Motivo y detalle</label>
             <textarea id="motivo" name="motivo" rows={5} required defaultValue={data.motivo} />
           </div>
+
+          <div className="stack" style={{ gap: "0.5rem" }}>
+            <p className="field-hint" style={{ margin: 0 }}>
+              <strong>Oficio institucional (Word):</strong> {data.justificativo_nombre ?? "—"}
+            </p>
+            <p className="field-hint" style={{ margin: 0 }}>
+              El oficio generado no se reemplaza al subir archivos. Para quitarlo o cambiarlo, use la opción en el
+              detalle de la solicitud.
+            </p>
+            {anexos.length > 0 ? (
+              <ul className="field-hint" style={{ margin: 0, paddingLeft: "1.1rem" }}>
+                {anexos.map((a) => (
+                  <li key={a.path}>{a.nombre}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="field-hint" style={{ margin: 0 }}>
+                Sin documentos de respaldo adicionales.
+              </p>
+            )}
+          </div>
+
           <div>
-            <label htmlFor="justificativo">Reemplazar justificativo (opcional)</label>
-            <p className="field-hint">Archivo actual: {data.justificativo_nombre}</p>
-            <input id="justificativo" className="file-input" name="justificativo" type="file" />
+            <label htmlFor="anexos">Agregar documentos de respaldo (opcional)</label>
+            <p className="field-hint">PDF, PNG o JPG. Se añaden al trámite sin reemplazar el oficio Word.</p>
+            <input id="anexos" className="file-input" name="anexos" type="file" multiple accept=".pdf,.png,.jpg,.jpeg" />
           </div>
           <div className="row">
             <button className="btn btn--primary" type="submit">
               Guardar cambios
             </button>
-            <Link href="/solicitudes" className="btn btn--secondary">
+            <Link href={`/solicitudes/${params.id}`} className="btn btn--secondary">
               Cancelar
             </Link>
           </div>

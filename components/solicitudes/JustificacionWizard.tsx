@@ -12,7 +12,7 @@ import {
   labelTipoPersonal,
   parseTipoPersonal
 } from "@/lib/certificado/tipo-personal";
-import { validarAnexosObligatorio, validarAnexosOpcional } from "@/lib/certificado/merge-pdf-anexos";
+import { validarAnexosObligatorio, validarAnexosOpcional } from "@/lib/certificado/anexo-validators";
 import { labelCarrera } from "@/lib/carreras";
 import { labelJornadaCuenta, isJornadaCuentaValida } from "@/lib/account-request";
 import {
@@ -27,7 +27,7 @@ import { ActionButton } from "@/components/ui/ActionButton";
 import { MultiFileUpload } from "@/components/ui/MultiFileUpload";
 import { EmergentAlertModal } from "@/components/ui/EmergentAlertModal";
 import { DocumentViewer } from "@/components/ui/DocumentViewer";
-import { HORA_MAXIMA_JORNADA, HORA_MINIMA_JORNADA, TimeInput } from "@/components/ui/TimeInput";
+import { TimeInput } from "@/components/ui/TimeInput";
 
 type Tipo = "enfermedad" | "viaje" | "calamidad_domestica" | "falta_marcado";
 
@@ -317,22 +317,15 @@ export function JustificacionWizard() {
       };
     }
 
-    const fecha_inasistencia = requireText("fecha_inasistencia", "Fecha de inasistencia");
-    const err = validateFechaInicioMaxTresMeses(fecha_inasistencia);
-    if (err) throw new Error(err);
-
     const fecha_incidente = requireText("fecha_incidente", "Fecha del incidente");
+    const errIncidente = validateFechaInicioMaxTresMeses(fecha_incidente);
+    if (errIncidente) throw new Error(errIncidente);
+
     const jornada = requireText("jornada", "Jornada");
     if (!isJornadaCuentaValida(jornada)) throw new Error("Selecciona una jornada válida.");
     const tipo_marcacion_omitida = requireText("tipo_marcacion_omitida", "Tipo de marcación omitida/fallida");
     const hora_real_ingreso = requireText("hora_real_ingreso", "Hora real de ingreso");
     const hora_real_salida = requireText("hora_real_salida", "Hora real de salida");
-    if (hora_real_ingreso < HORA_MINIMA_JORNADA || hora_real_ingreso > HORA_MAXIMA_JORNADA) {
-      throw new Error(`La hora de ingreso debe estar entre ${HORA_MINIMA_JORNADA} y ${HORA_MAXIMA_JORNADA}.`);
-    }
-    if (hora_real_salida < HORA_MINIMA_JORNADA || hora_real_salida > HORA_MAXIMA_JORNADA) {
-      throw new Error(`La hora de salida debe estar entre ${HORA_MINIMA_JORNADA} y ${HORA_MAXIMA_JORNADA}.`);
-    }
     const motivo_falta_registro = requireText("motivo_falta_registro", "Motivo de la falta de registro");
 
     const detalle: Record<string, unknown> = {
@@ -340,7 +333,6 @@ export function JustificacionWizard() {
       cedula,
       carrera,
       jornada,
-      fecha_inasistencia,
       fecha_incidente,
       tipo_marcacion_omitida,
       hora_real_ingreso,
@@ -351,8 +343,8 @@ export function JustificacionWizard() {
     };
 
     return {
-      fecha_inicio: fecha_inasistencia,
-      fecha_fin: fecha_inasistencia,
+      fecha_inicio: fecha_incidente,
+      fecha_fin: fecha_incidente,
       motivo: `Reporte de novedad en marcación (${labelMotivoMarcacionDetalle(motivo_falta_registro)})`,
       detalle
     };
@@ -609,7 +601,7 @@ export function JustificacionWizard() {
           )}
 
           <div className="stack">
-            {tipo !== "viaje" ? (
+            {tipo !== "viaje" && tipo !== "falta_marcado" ? (
               <Field label="Fecha de inasistencia *" hint="Se valida contra la fecha actual (máximo 3 meses hacia atrás).">
                 <DateInput
                   value={f.fecha_inasistencia ?? ""}
@@ -777,14 +769,14 @@ export function JustificacionWizard() {
                   </select>
                 </Field>
                 <div className="form-grid form-grid--2">
-                  <Field label="Hora real de ingreso *" hint={`Horario permitido: ${HORA_MINIMA_JORNADA} a ${HORA_MAXIMA_JORNADA}.`}>
+                  <Field label="Hora real de ingreso *" hint="Seleccione hora (00–23) y minutos (00–59).">
                     <TimeInput
                       value={f.hora_real_ingreso ?? ""}
                       onChange={(e) => patchField("hora_real_ingreso", e.target.value)}
                       required
                     />
                   </Field>
-                  <Field label="Hora real de salida *" hint={`Horario permitido: ${HORA_MINIMA_JORNADA} a ${HORA_MAXIMA_JORNADA}.`}>
+                  <Field label="Hora real de salida *" hint="Seleccione hora (00–23) y minutos (00–59).">
                     <TimeInput
                       value={f.hora_real_salida ?? ""}
                       onChange={(e) => patchField("hora_real_salida", e.target.value)}

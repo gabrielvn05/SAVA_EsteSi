@@ -28,7 +28,7 @@ export type SolicitudDetalleData = Readonly<{
   justificativo_url: string | null;
   anexo_nombre: string | null;
   anexo_url: string | null;
-  anexos: ReadonlyArray<{ nombre: string; url: string }>;
+  anexos: ReadonlyArray<{ path: string; nombre: string; url: string }>;
   created_at: string;
   updated_at: string;
   fecha_firma: string | null;
@@ -218,6 +218,7 @@ export function SolicitudDetallePanel({
         anexoNombre={solicitud.anexo_nombre}
         anexoUrl={solicitud.anexo_url}
         anexos={solicitud.anexos}
+        puedeEliminarAnexos={esCreador && solicitud.estado === "en_revision_secretaria"}
       />
 
       {observacionRechazo ? (
